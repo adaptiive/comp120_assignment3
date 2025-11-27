@@ -70,6 +70,17 @@ def init_db():
         payload TEXT
     )
     ''')
+    # Create tasks table for task management
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        created_at TEXT,
+        completed INTEGER DEFAULT 0,
+        username TEXT
+    )
+    ''')
     conn.commit()
     conn.close()
 
@@ -600,6 +611,141 @@ def network_status():
     }
     
     return jsonify(status)
+
+@app.route('/tasks', methods=['GET'])
+def list_tasks():
+    """List all tasks for the current user"""
+    username = session.get('username')
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    if username:
+        cur.execute('SELECT id, title, description, created_at, completed FROM tasks WHERE username = ? ORDER BY id DESC', (username,))
+    else:
+        cur.execute('SELECT id, title, description, created_at, completed FROM tasks WHERE username IS NULL ORDER BY id DESC')
+    rows = cur.fetchall()
+    conn.close()
+    
+    tasks = [dict(r) for r in rows]
+    return jsonify({'tasks': tasks})
+
+@app.route('/tasks', methods=['POST'])
+def add_task():
+    """Add a new task"""
+    data = request.json or {}
+    title = data.get('title', '').strip()
+    description = data.get('description', '').strip()
+    
+    if not title:
+        return jsonify({'status': 'error', 'message': 'Task title is required'}), 400
+    
+    username = session.get('username')
+    created_at = time.strftime('%Y-%m-%d %H:%M:%S')
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('INSERT INTO tasks (title, description, created_at, completed, username) VALUES (?, ?, ?, 0, ?)',
+                (title, description, created_at, username))
+    task_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        'status': 'success',
+        'task': {
+            'id': task_id,
+            'title': title,
+            'description': description,
+            'created_at': created_at,
+            'completed': 0
+        }
+    })
+
+@app.route('/tasks/<int:task_id>', methods=['GET'])
+def get_task(task_id):
+    """Get a specific task"""
+    username = session.get('username')
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    if username:
+        cur.execute('SELECT id, title, description, created_at, completed FROM tasks WHERE id = ? AND username = ?', (task_id, username))
+    else:
+        cur.execute('SELECT id, title, description, created_at, completed FROM tasks WHERE id = ? AND username IS NULL', (task_id,))
+    row = cur.fetchone()
+    conn.close()
+    
+    if not row:
+        return jsonify({'error': 'Task not found'}), 404
+    
+    return jsonify({'task': dict(row)})
+
+@app.route('/tasks/<int:task_id>', methods=['PUT'])
+def update_task(task_id):
+    """Update a task (mark as complete/incomplete or update details)"""
+    data = request.json or {}
+    username = session.get('username')
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Check if task exists and belongs to user
+    if username:
+        cur.execute('SELECT id FROM tasks WHERE id = ? AND username = ?', (task_id, username))
+    else:
+        cur.execute('SELECT id FROM tasks WHERE id = ? AND username IS NULL', (task_id,))
+    row = cur.fetchone()
+    
+    if not row:
+        conn.close()
+        return jsonify({'error': 'Task not found'}), 404
+    
+    # Update fields if provided
+    if 'completed' in data:
+        completed = 1 if data['completed'] else 0
+        cur.execute('UPDATE tasks SET completed = ? WHERE id = ?', (completed, task_id))
+    
+    if 'title' in data:
+        title = data['title'].strip()
+        if title:
+            cur.execute('UPDATE tasks SET title = ? WHERE id = ?', (title, task_id))
+    
+    if 'description' in data:
+        cur.execute('UPDATE tasks SET description = ? WHERE id = ?', (data['description'].strip(), task_id))
+    
+    conn.commit()
+    
+    # Fetch updated task
+    cur.execute('SELECT id, title, description, created_at, completed FROM tasks WHERE id = ?', (task_id,))
+    updated = cur.fetchone()
+    conn.close()
+    
+    return jsonify({'status': 'success', 'task': dict(updated)})
+
+@app.route('/tasks/<int:task_id>', methods=['DELETE'])
+def delete_task(task_id):
+    """Delete a task"""
+    username = session.get('username')
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Check if task exists and belongs to user
+    if username:
+        cur.execute('SELECT id FROM tasks WHERE id = ? AND username = ?', (task_id, username))
+    else:
+        cur.execute('SELECT id FROM tasks WHERE id = ? AND username IS NULL', (task_id,))
+    row = cur.fetchone()
+    
+    if not row:
+        conn.close()
+        return jsonify({'error': 'Task not found'}), 404
+    
+    cur.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'status': 'success', 'message': 'Task deleted'})
 
 if __name__ == '__main__':
     # Allow controlling debug/reloader via environment variables so the app
