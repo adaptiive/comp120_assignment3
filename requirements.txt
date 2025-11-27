@@ -1,0 +1,2 @@
+flask==2.3.3
+speedtest-cli==2.1.3
