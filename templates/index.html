@@ -318,6 +318,119 @@
 
         .hidden { display: none; }
 
+        /* Task management styles */
+        .task-panel {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            flex: 0 0 380px;
+            max-width: 420px;
+        }
+
+        .task-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .task-input {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .task-input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .task-input:focus {
+            outline: none;
+            border-color: rgba(79, 172, 254, 0.6);
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.15);
+        }
+
+        .task-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .task-item:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .task-item.completed {
+            opacity: 0.6;
+        }
+
+        .task-item.completed .task-title {
+            text-decoration: line-through;
+        }
+
+        .task-checkbox {
+            width: 22px;
+            height: 22px;
+            cursor: pointer;
+            accent-color: #4facfe;
+        }
+
+        .task-content {
+            flex: 1;
+        }
+
+        .task-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 4px;
+        }
+
+        .task-description {
+            font-size: 0.8rem;
+            opacity: 0.75;
+        }
+
+        .task-delete {
+            background: rgba(255, 100, 100, 0.2);
+            border: none;
+            color: #ffb3b3;
+            font-size: 0.85rem;
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .task-delete:hover {
+            background: rgba(255, 100, 100, 0.4);
+        }
+
+        .task-empty {
+            text-align: center;
+            padding: 20px;
+            opacity: 0.6;
+            font-size: 0.9rem;
+        }
+
         .speed-display { 
             display: grid; 
             grid-template-columns: repeat(3, 1fr); 
@@ -432,6 +545,11 @@
             
             .speed-display { 
                 grid-template-columns: 1fr; 
+            }
+
+            .task-panel {
+                max-width: 100%;
+                flex-basis: auto;
             }
         }
     </style>
@@ -615,6 +733,21 @@
                 </div>
             </div>
         </div>
+
+        <!-- Task Management Panel -->
+        <div class="task-panel hidden" id="taskPanel">
+            <div class="panel-title">📝 My Tasks</div>
+            
+            <div class="task-form">
+                <input type="text" id="taskTitle" class="task-input" placeholder="Task title..." maxlength="100">
+                <input type="text" id="taskDescription" class="task-input" placeholder="Description (optional)..." maxlength="200">
+                <button class="feature-button" onclick="addTask()">Add Task</button>
+            </div>
+            
+            <div class="task-list" id="taskList">
+                <div class="task-empty">No tasks yet. Add one above!</div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -667,27 +800,35 @@
             const advancedPanel = document.getElementById('advancedPanel');
             const itFeatures = document.getElementById('itAdminFeatures');
             const ispFeatures = document.getElementById('ispSupportFeatures');
+            const taskPanel = document.getElementById('taskPanel');
             
             // Reset all panels
             advancedPanel.classList.add('hidden');
             itFeatures.classList.add('hidden');
             ispFeatures.classList.add('hidden');
+            taskPanel.classList.add('hidden');
             
             switch(role) {
                 case 'home_user':
                     dashboardTitle.textContent = '🏠 Home User Dashboard';
+                    taskPanel.classList.remove('hidden');
+                    loadTasks();
                     break;
                 case 'it_admin':
                     dashboardTitle.textContent = '👨‍💻 IT Administrator Dashboard';
                     advancedPanel.classList.remove('hidden');
                     itFeatures.classList.remove('hidden');
+                    taskPanel.classList.remove('hidden');
                     document.getElementById('panelTitle').textContent = 'Network Management Tools';
+                    loadTasks();
                     break;
                 case 'isp_support':
                     dashboardTitle.textContent = '📞 ISP Support Dashboard';
                     advancedPanel.classList.remove('hidden');
                     ispFeatures.classList.remove('hidden');
+                    taskPanel.classList.remove('hidden');
                     document.getElementById('panelTitle').textContent = 'Customer Support Tools';
+                    loadTasks();
                     break;
             }
         }
@@ -1001,6 +1142,107 @@
                     }
                 })
                 .catch(err => console.error('Error fetching report:', err));
+        }
+
+        // Task management functions
+        function loadTasks() {
+            fetch('/tasks')
+                .then(r => r.json())
+                .then(data => {
+                    renderTasks(data.tasks || []);
+                })
+                .catch(err => console.error('Error loading tasks:', err));
+        }
+
+        function renderTasks(tasks) {
+            const taskList = document.getElementById('taskList');
+            if (!tasks || tasks.length === 0) {
+                taskList.innerHTML = '<div class="task-empty">No tasks yet. Add one above!</div>';
+                return;
+            }
+
+            taskList.innerHTML = '';
+            tasks.forEach(task => {
+                const taskEl = document.createElement('div');
+                taskEl.className = 'task-item' + (task.completed ? ' completed' : '');
+                taskEl.innerHTML = `
+                    <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask(${task.id}, this.checked)">
+                    <div class="task-content">
+                        <div class="task-title">${escapeHtml(task.title)}</div>
+                        ${task.description ? `<div class="task-description">${escapeHtml(task.description)}</div>` : ''}
+                    </div>
+                    <button class="task-delete" onclick="deleteTask(${task.id})">Delete</button>
+                `;
+                taskList.appendChild(taskEl);
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function addTask() {
+            const titleInput = document.getElementById('taskTitle');
+            const descInput = document.getElementById('taskDescription');
+            const title = titleInput.value.trim();
+            const description = descInput.value.trim();
+
+            if (!title) {
+                alert('Please enter a task title');
+                return;
+            }
+
+            fetch('/tasks', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({title: title, description: description})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    titleInput.value = '';
+                    descInput.value = '';
+                    loadTasks();
+                } else {
+                    alert(data.message || 'Failed to add task');
+                }
+            })
+            .catch(err => {
+                console.error('Error adding task:', err);
+                alert('Error adding task');
+            });
+        }
+
+        function toggleTask(taskId, completed) {
+            fetch(`/tasks/${taskId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({completed: completed})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    loadTasks();
+                }
+            })
+            .catch(err => console.error('Error updating task:', err));
+        }
+
+        function deleteTask(taskId) {
+            if (!confirm('Delete this task?')) return;
+
+            fetch(`/tasks/${taskId}`, {method: 'DELETE'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    loadTasks();
+                } else {
+                    alert(data.error || 'Failed to delete task');
+                }
+            })
+            .catch(err => console.error('Error deleting task:', err));
         }
 
         // Role selection and login initialization
